@@ -156,11 +156,16 @@ class AlertService:
             alert.direction,
             alert.target_price,
         )
-        current = await self.get_current_prices([resolved])
+        try:
+            current = await self.get_current_prices([resolved])
+            current_price = current["prices"][0] if current["prices"] else None
+        except Exception:
+            logger.warning("failed to fetch current price for new alert id=%s", alert.id)
+            current_price = None
         self._watch_set_changed.set()
         return {
             "alert": alert.to_dict(),
-            "current_price": current["prices"][0] if current["prices"] else None,
+            "current_price": current_price,
         }
 
     async def list_current_alerts(self, *, instrument: str | None = None) -> dict:
