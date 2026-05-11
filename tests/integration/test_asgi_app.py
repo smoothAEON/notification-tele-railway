@@ -9,6 +9,12 @@ from alert_mcp.store import AlertStore
 from tests.unit.test_service import FakeNotifier, FakePriceClient
 
 
+def test_root_main_exports_vercel_app() -> None:
+    import main
+
+    assert callable(main.app)
+
+
 def build_settings(tmp_path: Path) -> Settings:
     return Settings(
         OANDA_API_KEY="token",
@@ -39,4 +45,3 @@ def test_health_is_unauthenticated_and_mcp_requires_bearer(tmp_path: Path) -> No
 
         unauthorized = client.get("/mcp")
         assert unauthorized.status_code == 401
-
