@@ -26,6 +26,7 @@ class OandaPriceClient:
         resolved = normalize_instruments(tuple(instruments))
         if not resolved:
             return {}
+        logger.info("oanda_rest_pricing_request instruments=%s", ",".join(resolved))
         return await asyncio.to_thread(self._get_prices_sync, resolved)
 
     async def stream_prices(self, instruments: Iterable[str]) -> AsyncGenerator[PriceQuote, None]:
@@ -72,9 +73,15 @@ class OandaPriceClient:
         for payload in prices:
             quote = self._payload_to_quote(payload, source="rest")
             result[quote.instrument] = quote
+        logger.info(
+            "oanda_rest_pricing_response instruments=%s price_count=%s",
+            ",".join(instruments),
+            len(result),
+        )
         return result
 
     def _open_stream(self, instruments: tuple[str, ...]) -> tuple[object, Iterator[dict[str, Any]]]:
+        logger.info("oanda_stream_opening instruments=%s", ",".join(instruments))
         stream_endpoint = self._import_pricing_stream_endpoint()
         endpoint = stream_endpoint(
             accountID=self.settings.oanda_account_id.get_secret_value(),
@@ -174,4 +181,3 @@ class OandaPriceClient:
         from oandapyV20.endpoints.pricing import PricingStream
 
         return PricingStream
-

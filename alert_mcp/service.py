@@ -41,14 +41,17 @@ class AlertService:
         self._stream_error: str | None = None
 
     async def start(self) -> None:
+        logger.info("alert service starting db_path=%s", self.settings.alert_db_path)
         recovered = self.store.recover_firing_alerts()
         if recovered:
             logger.warning("recovered %s stale FIRING alerts", recovered)
         self._stop_event.clear()
         if self._monitor_task is None or self._monitor_task.done():
             self._monitor_task = asyncio.create_task(self._monitor_loop(), name="oanda-alert-monitor")
+            logger.info("alert monitor task created")
 
     async def stop(self) -> None:
+        logger.info("alert service stopping")
         self._stop_event.set()
         self._watch_set_changed.set()
         if self._monitor_task is not None:
@@ -58,6 +61,7 @@ class AlertService:
             except asyncio.CancelledError:
                 pass
             self._monitor_task = None
+        logger.info("alert service stopped")
 
     async def get_service_status(self) -> dict:
         counts = self.store.status_counts()
@@ -113,6 +117,7 @@ class AlertService:
                     missing.append(instrument)
 
         if missing:
+            logger.info("fetching current prices instruments=%s", ",".join(missing))
             rest_quotes = await self.price_client.get_prices(missing)
             for quote in rest_quotes.values():
                 await self._cache_quote(quote)
@@ -144,6 +149,13 @@ class AlertService:
             direction=direction,
             note=note,
         )
+        logger.info(
+            "created price alert id=%s instrument=%s direction=%s target_price=%s",
+            alert.id,
+            alert.instrument,
+            alert.direction,
+            alert.target_price,
+        )
         current = await self.get_current_prices([resolved])
         self._watch_set_changed.set()
         return {
@@ -162,11 +174,17 @@ class AlertService:
 
     async def cancel_alert(self, *, alert_id: int) -> dict:
         alert = self.store.cancel_alert(alert_id)
+        logger.info("cancel alert requested id=%s cancelled=%s", alert_id, alert is not None)
         self._watch_set_changed.set()
         return {"cancelled": alert is not None, "alert": alert.to_dict() if alert else None}
 
     async def cancel_current_alerts(self, *, instrument: str | None = None) -> dict:
         alerts = self.store.cancel_current_alerts(instrument=instrument)
+        logger.info(
+            "cancel current alerts requested instrument=%s cancelled_count=%s",
+            instrument,
+            len(alerts),
+        )
         self._watch_set_changed.set()
         return {"cancelled_count": len(alerts), "alerts": [alert.to_dict() for alert in alerts]}
 
@@ -190,8 +208,16 @@ class AlertService:
 
     async def _monitor_loop(self) -> None:
         backoff = 1.0
+        last_logged_instruments: tuple[str, ...] | None = None
+        logger.info("alert monitor loop started")
         while not self._stop_event.is_set():
             instruments = self.get_watched_instruments()
+            if instruments != last_logged_instruments:
+                if instruments:
+                    logger.info("alert monitor watching instruments=%s", ",".join(instruments))
+                else:
+                    logger.info("alert monitor idle no_active_alerts=true")
+                last_logged_instruments = instruments
             if not instruments:
                 self._streaming_instruments = ()
                 await self._wait_for_watch_change(timeout=5.0)
@@ -228,12 +254,17 @@ class AlertService:
                     logger.warning("price stream failed: %s", exc)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, float(self.settings.stream_reconnect_max_seconds))
+        logger.info("alert monitor loop stopped")
 
     async def _consume_stream(self, instruments: tuple[str, ...]) -> None:
         self._streaming_instruments = instruments
         self._stream_error = None
-        async for quote in self.price_client.stream_prices(instruments):
-            await self.process_quote(quote)
+        logger.info("price stream starting instruments=%s", ",".join(instruments))
+        try:
+            async for quote in self.price_client.stream_prices(instruments):
+                await self.process_quote(quote)
+        finally:
+            logger.info("price stream stopped instruments=%s", ",".join(instruments))
 
     async def _wait_for_watch_change(self, *, timeout: float) -> None:
         self._watch_set_changed.clear()
@@ -247,17 +278,31 @@ class AlertService:
             self._price_cache[quote.instrument] = quote
 
     async def _fire_alert(self, alert: Alert, *, trigger_price: float) -> None:
+        logger.info(
+            "price alert firing id=%s instrument=%s trigger_price=%s",
+            alert.id,
+            alert.instrument,
+            trigger_price,
+        )
         firing = self.store.mark_firing(alert.id, trigger_price=trigger_price)
         if firing is None:
+            logger.info("price alert skipped id=%s reason=not_pending", alert.id)
             return
 
         delivery = await self.notifier.send_price_alert(firing, trigger_price=trigger_price)
         if delivery.ok:
             fired = self.store.mark_fired(firing.id, trigger_price=trigger_price)
             if fired:
+                logger.info("price alert fired id=%s instrument=%s", fired.id, fired.instrument)
                 self._watch_set_changed.set()
             return
 
+        logger.warning(
+            "price alert delivery failed id=%s instrument=%s error=%s",
+            firing.id,
+            firing.instrument,
+            delivery.error,
+        )
         self.store.release_firing(
             firing.id,
             error=delivery.error or "Telegram delivery failed.",

@@ -38,6 +38,7 @@ class TelegramNotifier:
 
     def _send_price_alert_sync(self, alert: Alert, trigger_price: float) -> DeliveryResult:
         if not self.ready:
+            logger.warning("telegram_not_ready alert_id=%s instrument=%s", alert.id, alert.instrument)
             return DeliveryResult(ok=False, error="Telegram bot token or chat id is missing.")
 
         direction = "above" if alert.direction == "above" else "below"
@@ -64,9 +65,9 @@ class TelegramNotifier:
             return DeliveryResult(ok=False, error=str(exc))
 
         if response.ok:
+            logger.info("telegram_alert_sent alert_id=%s instrument=%s", alert.id, alert.instrument)
             return DeliveryResult(ok=True)
 
         error = f"Telegram HTTP {response.status_code}: {response.text[:500]}"
         logger.warning("telegram_send_rejected: %s", error)
         return DeliveryResult(ok=False, error=error)
-
