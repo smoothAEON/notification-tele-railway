@@ -18,6 +18,7 @@ TOOL_SPECS: tuple[dict[str, str], ...] = (
     {"name": "list_fired_alerts", "description": "List fired price alerts ordered newest first."},
     {"name": "cancel_alert", "description": "Cancel one current alert by id."},
     {"name": "cancel_current_alerts", "description": "Cancel all current alerts, optionally filtered by instrument."},
+    {"name": "send_telegram_test", "description": "Send a test message to the configured Telegram chat to verify delivery works."},
 )
 
 
@@ -58,6 +59,9 @@ class AlertMcpTools:
 
     async def cancel_current_alerts(self, instrument: str | None = None) -> dict[str, Any]:
         return await self.service.cancel_current_alerts(instrument=instrument)
+
+    async def send_telegram_test(self, message: str | None = None) -> dict[str, Any]:
+        return await self.service.send_telegram_test(message=message)
 
 
 def build_mcp_server(*, service: AlertService, settings: Settings) -> FastMCP:

@@ -183,6 +183,15 @@ class AlertService:
         self._watch_set_changed.set()
         return {"cancelled": alert is not None, "alert": alert.to_dict() if alert else None}
 
+    async def send_telegram_test(self, *, message: str | None = None) -> dict:
+        result = await self.notifier.send_test_message(message)
+        return {
+            "ok": result.ok,
+            "error": result.error,
+            "chat_id": self.settings.telegram_chat_id,
+            "telegram_ready": self.notifier.ready,
+        }
+
     async def cancel_current_alerts(self, *, instrument: str | None = None) -> dict:
         alerts = self.store.cancel_current_alerts(instrument=instrument)
         logger.info(

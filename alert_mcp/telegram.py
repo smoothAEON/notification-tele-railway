@@ -33,6 +33,27 @@ class TelegramNotifier:
     def ready(self) -> bool:
         return bool(self._token and self._chat_id)
 
+    async def send_test_message(self, message: str | None = None) -> DeliveryResult:
+        return await asyncio.to_thread(self._send_raw_sync, message or "✅ OANDA Alert MCP — Telegram test message OK")
+
+    def _send_raw_sync(self, text: str) -> DeliveryResult:
+        if not self.ready:
+            return DeliveryResult(ok=False, error="Telegram bot token or chat id is missing.")
+        payload = {
+            "chat_id": self._chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        try:
+            response = requests.post(self._url, json=payload, timeout=10)
+        except requests.RequestException as exc:
+            logger.warning("telegram_test_send_failed", exc_info=True)
+            return DeliveryResult(ok=False, error=str(exc))
+        if response.ok:
+            return DeliveryResult(ok=True)
+        return DeliveryResult(ok=False, error=f"Telegram HTTP {response.status_code}: {response.text[:500]}")
+
     async def send_price_alert(self, alert: Alert, *, trigger_price: float) -> DeliveryResult:
         return await asyncio.to_thread(self._send_price_alert_sync, alert, trigger_price)
 
