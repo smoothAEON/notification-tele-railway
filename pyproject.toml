@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oanda-alert-mcp"
+version = "0.1.0"
+description = "Railway-hosted MCP Streamable HTTP service for OANDA price alerts."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "OANDA Alert MCP" }]
+dependencies = [
+  "mcp>=1.27.0",
+  "oandapyV20>=0.7.2",
+  "pydantic>=2.0",
+  "pydantic-settings>=2.0",
+  "python-dotenv>=1.0.0",
+  "requests>=2.31.0",
+  "starlette>=0.37.0",
+  "uvicorn>=0.29.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx>=0.27.0",
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+oanda-alert-mcp = "alert_mcp.main:main"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["alert_mcp", "alert_mcp.*"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+python_files = ["test_*.py"]
+testpaths = ["tests/unit", "tests/integration"]
+asyncio_mode = "auto"
+
